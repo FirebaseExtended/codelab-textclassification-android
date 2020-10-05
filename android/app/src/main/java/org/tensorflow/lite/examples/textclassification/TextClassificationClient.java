@@ -83,7 +83,6 @@ public class TextClassificationClient {
   private final Map<String, Integer> dic = new HashMap<>();
   private final List<String> labels = new ArrayList<>();
   private Interpreter tflite;
-  private FirebaseRemoteConfig mFirebaseRemoteConfig = FirebaseRemoteConfig.getInstance();
 
   /** An immutable result returned by a TextClassifier describing what was classified. */
   public static class Result {
@@ -143,85 +142,16 @@ public class TextClassificationClient {
 
   /** Load the TF Lite model and dictionary so that the client can start classifying text. */
   @WorkerThread
-  public void load() {
-    loadModel();
+  public void load(File modelFile) {
+    loadModel(modelFile);
     loadDictionary();
     loadLabels();
   }
 
   /** Load TF Lite model. */
   @WorkerThread
-  private synchronized void loadModel() {
-    FirebaseRemoteConfigSettings configSettings = new FirebaseRemoteConfigSettings.Builder()
-        .setMinimumFetchIntervalInSeconds(3600)
-        .build();
-    mFirebaseRemoteConfig.setConfigSettingsAsync(configSettings);
-    mFirebaseRemoteConfig.fetchAndActivate().
-        addOnCompleteListener(new OnCompleteListener<Boolean>() {
-          @Override
-          public void onComplete(@NonNull Task<Boolean> task) {
-            if (task.isSuccessful()) {
-              final String modelName = mFirebaseRemoteConfig.getString("model_name")
-              final FirebaseCustomRemoteModel remoteModel =
-                  new FirebaseCustomRemoteModel.Builder(modelName).build();
-              final FirebaseModelManager firebaseModelManager = FirebaseModelManager.getInstance();
-              Trace downloadModelTrace = FirebasePerformance.getInstance().newTrace("download_model");
-              firebaseModelManager
-                  .isModelDownloaded(remoteModel)
-                  .continueWithTask(
-                      new Continuation<Boolean, Task<Void>>() {
-                        @Override
-                        public Task<Void> then(@NonNull Task<Boolean> task) throws Exception {
-                          // Create update condition if model is already downloaded,
-                          // otherwise create download
-                          // condition.
-                          FirebaseModelDownloadConditions conditions =
-                              task.getResult()
-                                  ? new FirebaseModelDownloadConditions.Builder()
-                                  .requireWifi()
-                                  .build() // Update condition that requires wifi.
-                                  : new FirebaseModelDownloadConditions.Builder()
-                                  .build(); // Download condition.
-                          downloadModelTrace.start();
-                          return firebaseModelManager.download(remoteModel, conditions);
-                        }
-                      })
-                  .addOnSuccessListener(
-                      new OnSuccessListener<Void>() {
-                        @Override
-                        public void onSuccess(Void ignored) {
-                          downloadModelTrace.stop();
-                          firebaseModelManager.getLatestModelFile(remoteModel)
-                              .addOnCompleteListener(new OnCompleteListener<File>() {
-                                @Override
-                                public void onComplete(Task<File> modelFileTask) {
-                                  File modelFile = modelFileTask.getResult();
-                                  if (modelFile != null) {
-                                    tflite = new Interpreter(modelFile);
-                                  }
-                                }
-                              });
-                        }
-                      })
-                  .addOnFailureListener(
-                      new OnFailureListener() {
-                        @Override
-                        public void onFailure(@NonNull Exception ignored) {
-                          downloadModelTrace.stop();
-                          Log.e(TAG, "Failed to build FirebaseModelInterpreter. ", ignored);
-                          Toast.makeText(
-                              context,
-                              "Model download failed, please check" +
-                                  " your connection.",
-                              Toast.LENGTH_LONG)
-                              .show();
-                        }
-                      });
-            } else {
-              Log.d(TAG, "Fetch failed");
-            }
-          }
-        });
+  private synchronized void loadModel(File modelFile) {
+    tflite = new Interpreter(modelFile);
   }
 
 

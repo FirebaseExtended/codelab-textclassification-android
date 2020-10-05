@@ -38,25 +38,13 @@
       android:layout_height="wrap_content"
       android:text="@string/tfe_tc_button_ok"
       app:layout_constraintBottom_toBottomOf="parent"
-      app:layout_constraintEnd_toEndOf="@+id/thumb_up_button"
       app:layout_constraintStart_toEndOf="@+id/input_text" />
 
-  <ImageButton
-      android:id="@+id/thumb_up_button"
+  <Button
+      android:id="@+id/yes_button"
       android:layout_width="wrap_content"
       android:layout_height="wrap_content"
-      android:background="@drawable/ic_thumb_up_black_24dp"
       app:layout_constraintBottom_toBottomOf="parent"
-      app:layout_constraintEnd_toEndOf="@+id/thumb_down_button"
       app:layout_constraintStart_toEndOf="@+id/button" />
-
-  <ImageButton
-      android:id="@+id/thumb_down_button"
-      android:layout_width="wrap_content"
-      android:layout_height="wrap_content"
-      android:background="@drawable/ic_thumb_down_black_24dp"
-      app:layout_constraintBottom_toBottomOf="parent"
-      app:layout_constraintEnd_toEndOf="parent"
-      app:layout_constraintStart_toEndOf="@+id/thumb_up_button" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

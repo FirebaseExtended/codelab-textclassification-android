@@ -25,11 +25,29 @@ import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.android.gms.tasks.Continuation;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
 import com.google.firebase.analytics.FirebaseAnalytics;
+import com.google.firebase.ml.common.modeldownload.FirebaseModelDownloadConditions;
+import com.google.firebase.ml.common.modeldownload.FirebaseModelManager;
+import com.google.firebase.ml.custom.FirebaseCustomRemoteModel;
+import com.google.firebase.perf.FirebasePerformance;
+import com.google.firebase.perf.metrics.Trace;
+import com.google.firebase.remoteconfig.FirebaseRemoteConfig;
+import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings;
 
+import java.io.File;
 import java.util.List;
+
+import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.examples.textclassification.TextClassificationClient.Result;
 
 /** The main activity to provide interactions with users. */
@@ -42,6 +60,7 @@ public class MainActivity extends AppCompatActivity {
   private Handler handler;
   private ScrollView scrollView;
   private FirebaseAnalytics mFirebaseAnalytics;
+  private FirebaseRemoteConfig mFirebaseRemoteConfig;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -59,17 +78,13 @@ public class MainActivity extends AppCompatActivity {
     resultTextView = findViewById(R.id.result_text_view);
     inputEditText = findViewById(R.id.input_text);
     scrollView = findViewById(R.id.scroll_view);
-    ImageButton thumbUpButton = findViewById(R.id.thumb_up_button)
-    ImageButton thumbDownButton = findViewById(R.id.thumb_down_button)
+    Button yesButton = findViewById(R.id.yes_button)
     mFirebaseAnalytics = FirebaseAnalytics.getInstance(this);
+    mFirebaseRemoteConfig = FirebaseRemoteConfig.getInstance();
 
-    thumbUpButton.setOnClickListener(
+    yesButton.setOnClickListener(
         (View v) -> {
-          mFirebaseAnalytics.logEvent("good_answer", null);
-        });
-    thumbDownButton.setOnClickListener(
-        (View v) -> {
-          mFirebaseAnalytics.logEvent("bad_answer", null);
+          mFirebaseAnalytics.logEvent("correct_inference", null);
         });
   }
 
@@ -77,10 +92,7 @@ public class MainActivity extends AppCompatActivity {
   protected void onStart() {
     super.onStart();
     Log.v(TAG, "onStart");
-    handler.post(
-        () -> {
-          client.load();
-        });
+    setupTextClassification();
   }
 
   @Override
@@ -128,4 +140,91 @@ public class MainActivity extends AppCompatActivity {
           scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
         });
   }
+
+    /** Download model from Firebase ML. */
+    private void downloadModel(final String modelName) {
+        final FirebaseCustomRemoteModel remoteModel =
+                new FirebaseCustomRemoteModel.Builder(modelName).build();
+        final FirebaseModelManager firebaseModelManager = FirebaseModelManager.getInstance();
+        Trace downloadModelTrace = FirebasePerformance.getInstance().newTrace("download_model");
+        firebaseModelManager
+                .isModelDownloaded(remoteModel)
+                .continueWithTask(
+                        new Continuation<Boolean, Task<Void>>() {
+                            @Override
+                            public Task<Void> then(@NonNull Task<Boolean> task) throws Exception {
+                                // Create update condition if model is already downloaded,
+                                // otherwise create download
+                                // condition.
+                                FirebaseModelDownloadConditions conditions =
+                                        task.getResult()
+                                                ? new FirebaseModelDownloadConditions.Builder()
+                                                .requireWifi()
+                                                .build() // Update condition that requires wifi.
+                                                : new FirebaseModelDownloadConditions.Builder()
+                                                .build(); // Download condition.
+                                downloadModelTrace.start();
+                                return firebaseModelManager.download(remoteModel, conditions);
+                            }
+                        })
+                .addOnSuccessListener(
+                        new OnSuccessListener<Void>() {
+                            @Override
+                            public void onSuccess(Void ignored) {
+                                downloadModelTrace.stop();
+                                firebaseModelManager.getLatestModelFile(remoteModel)
+                                        .addOnCompleteListener(new OnCompleteListener<File>() {
+                                            @Override
+                                            public void onComplete(Task<File> modelFileTask) {
+                                                File modelFile = modelFileTask.getResult();
+                                                if (modelFile != null) {
+                                                    handler.post(
+                                                            () -> {
+                                                                client.load(modelFile);
+                                                            });
+                                                }
+                                            }
+                                        });
+                            }
+                        })
+                .addOnFailureListener(
+                        new OnFailureListener() {
+                            @Override
+                            public void onFailure(@NonNull Exception ignored) {
+                                downloadModelTrace.stop();
+                                Log.e(TAG, "Failed to build FirebaseModelInterpreter. ", ignored);
+                                Toast.makeText(
+                                        context,
+                                        "Model download failed, please check" +
+                                                " your connection.",
+                                        Toast.LENGTH_LONG)
+                                        .show();
+                            }
+                        });
+    }
+
+    /** Configure RemoteConfig. */
+    private void configureRemoteConfig() {
+        FirebaseRemoteConfigSettings configSettings = new FirebaseRemoteConfigSettings.Builder()
+                .setMinimumFetchIntervalInSeconds(3600)
+                .build();
+        mFirebaseRemoteConfig.setConfigSettingsAsync(configSettings);
+    }
+
+    /** Setup TextClassification. */
+    private void setupTextClassification() {
+        configureRemoteConfig();
+        mFirebaseRemoteConfig.fetchAndActivate().
+                addOnCompleteListener(new OnCompleteListener<Boolean>() {
+                    @Override
+                    public void onComplete(@NonNull Task<Boolean> task) {
+                        if (task.isSuccessful()) {
+                            final String modelName = mFirebaseRemoteConfig.getString("model_name");
+                            downloadModel(modelName);
+                        } else {
+                            Log.d(TAG, "Fetch failed");
+                        }
+                    }
+                });
+    }
 }

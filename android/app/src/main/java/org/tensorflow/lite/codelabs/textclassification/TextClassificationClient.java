@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.tensorflow.lite.examples.textclassification;
+package org.tensorflow.lite.codelabs.textclassification;
 
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.tensorflow.lite.examples.textclassification;
+package org.tensorflow.lite.codelabs.textclassification;
 
 import android.os.Bundle;
 import android.os.Handler;
@@ -22,7 +22,6 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageButton;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -47,8 +46,7 @@ import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings;
 import java.io.File;
 import java.util.List;
 
-import org.tensorflow.lite.Interpreter;
-import org.tensorflow.lite.examples.textclassification.TextClassificationClient.Result;
+import org.tensorflow.lite.codelabs.textclassification.TextClassificationClient.Result;
 
 /** The main activity to provide interactions with users. */
 public class MainActivity extends AppCompatActivity {
@@ -78,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
     resultTextView = findViewById(R.id.result_text_view);
     inputEditText = findViewById(R.id.input_text);
     scrollView = findViewById(R.id.scroll_view);
-    Button yesButton = findViewById(R.id.yes_button)
+    Button yesButton = findViewById(R.id.yes_button);
     mFirebaseAnalytics = FirebaseAnalytics.getInstance(this);
     mFirebaseRemoteConfig = FirebaseRemoteConfig.getInstance();
 
@@ -194,7 +192,7 @@ public class MainActivity extends AppCompatActivity {
                                 downloadModelTrace.stop();
                                 Log.e(TAG, "Failed to build FirebaseModelInterpreter. ", ignored);
                                 Toast.makeText(
-                                        context,
+                                        MainActivity.this,
                                         "Model download failed, please check" +
                                                 " your connection.",
                                         Toast.LENGTH_LONG)

@@ -31,34 +31,31 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.gms.tasks.Continuation;
 import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.analytics.FirebaseAnalytics;
 import com.google.firebase.ml.common.modeldownload.FirebaseModelDownloadConditions;
 import com.google.firebase.ml.common.modeldownload.FirebaseModelManager;
 import com.google.firebase.ml.custom.FirebaseCustomRemoteModel;
-import com.google.firebase.perf.FirebasePerformance;
-import com.google.firebase.perf.metrics.Trace;
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig;
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings;
 
 import java.io.File;
 import java.util.List;
 
-import org.tensorflow.lite.codelabs.textclassification.TextClassificationClient.Result;
+import org.tensorflow.lite.support.label.Category;
+import org.tensorflow.lite.task.text.nlclassifier.NLClassifier;
 
 /** The main activity to provide interactions with users. */
 public class MainActivity extends AppCompatActivity {
   private static final String TAG = "TextClassificationDemo";
-  private TextClassificationClient client;
 
   private TextView resultTextView;
   private EditText inputEditText;
   private Handler handler;
   private ScrollView scrollView;
-  private FirebaseAnalytics mFirebaseAnalytics;
-  private FirebaseRemoteConfig mFirebaseRemoteConfig;
+  private FirebaseAnalytics analytics;
+  private FirebaseRemoteConfig remoteConfig;
+  private NLClassifier textClassifier;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -66,9 +63,8 @@ public class MainActivity extends AppCompatActivity {
     setContentView(R.layout.tfe_tc_activity_main);
     Log.v(TAG, "onCreate");
 
-    client = new TextClassificationClient(getApplicationContext());
     handler = new Handler();
-    Button classifyButton = findViewById(R.id.button);
+    Button classifyButton = findViewById(R.id.predict_button);
     classifyButton.setOnClickListener(
         (View v) -> {
           classify(inputEditText.getText().toString());
@@ -77,12 +73,12 @@ public class MainActivity extends AppCompatActivity {
     inputEditText = findViewById(R.id.input_text);
     scrollView = findViewById(R.id.scroll_view);
     Button yesButton = findViewById(R.id.yes_button);
-    mFirebaseAnalytics = FirebaseAnalytics.getInstance(this);
-    mFirebaseRemoteConfig = FirebaseRemoteConfig.getInstance();
+    analytics = FirebaseAnalytics.getInstance(this);
+    remoteConfig = FirebaseRemoteConfig.getInstance();
 
     yesButton.setOnClickListener(
         (View v) -> {
-          mFirebaseAnalytics.logEvent("correct_inference", null);
+          analytics.logEvent("correct_inference", null);
         });
   }
 
@@ -99,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
     Log.v(TAG, "onStop");
     handler.post(
         () -> {
-          client.unload();
+          textClassifier.close();
         });
   }
 
@@ -108,7 +104,7 @@ public class MainActivity extends AppCompatActivity {
     handler.post(
         () -> {
           // Run text classification with TF Lite.
-          List<Result> results = client.classify(text);
+          List<Category> results = textClassifier.classify(text);
 
           // Show classification result on screen
           showResult(text, results);
@@ -116,15 +112,15 @@ public class MainActivity extends AppCompatActivity {
   }
 
   /** Show classification result on the screen. */
-  private void showResult(final String inputText, final List<Result> results) {
+  private void showResult(final String inputText, final List<Category> results) {
     // Run on UI thread as we'll updating our app UI
     runOnUiThread(
         () -> {
           String textToShow = "Input: " + inputText + "\nOutput:\n";
           for (int i = 0; i < results.size(); i++) {
-            Result result = results.get(i);
+            Category result = results.get(i);
             textToShow +=
-                String.format("    %s: %s\n", result.getTitle(), result.getConfidence());
+                String.format("    %s: %s\n", result.getLabel(), result.getScore());
           }
           textToShow += "---------\n";
 
@@ -140,65 +136,35 @@ public class MainActivity extends AppCompatActivity {
   }
 
     /** Download model from Firebase ML. */
-    private void downloadModel(final String modelName) {
-        final FirebaseCustomRemoteModel remoteModel =
-                new FirebaseCustomRemoteModel.Builder(modelName).build();
-        final FirebaseModelManager firebaseModelManager = FirebaseModelManager.getInstance();
-        Trace downloadModelTrace = FirebasePerformance.getInstance().newTrace("download_model");
-        firebaseModelManager
-                .isModelDownloaded(remoteModel)
-                .continueWithTask(
-                        new Continuation<Boolean, Task<Void>>() {
-                            @Override
-                            public Task<Void> then(@NonNull Task<Boolean> task) throws Exception {
-                                // Create update condition if model is already downloaded,
-                                // otherwise create download
-                                // condition.
-                                FirebaseModelDownloadConditions conditions =
-                                        task.getResult()
-                                                ? new FirebaseModelDownloadConditions.Builder()
-                                                .requireWifi()
-                                                .build() // Update condition that requires wifi.
-                                                : new FirebaseModelDownloadConditions.Builder()
-                                                .build(); // Download condition.
-                                downloadModelTrace.start();
-                                return firebaseModelManager.download(remoteModel, conditions);
-                            }
-                        })
-                .addOnSuccessListener(
-                        new OnSuccessListener<Void>() {
-                            @Override
-                            public void onSuccess(Void ignored) {
-                                downloadModelTrace.stop();
-                                firebaseModelManager.getLatestModelFile(remoteModel)
-                                        .addOnCompleteListener(new OnCompleteListener<File>() {
-                                            @Override
-                                            public void onComplete(Task<File> modelFileTask) {
-                                                File modelFile = modelFileTask.getResult();
-                                                if (modelFile != null) {
-                                                    handler.post(
-                                                            () -> {
-                                                                client.load(modelFile);
-                                                            });
-                                                }
-                                            }
-                                        });
-                            }
-                        })
-                .addOnFailureListener(
-                        new OnFailureListener() {
-                            @Override
-                            public void onFailure(@NonNull Exception ignored) {
-                                downloadModelTrace.stop();
-                                Log.e(TAG, "Failed to build FirebaseModelInterpreter. ", ignored);
-                                Toast.makeText(
-                                        MainActivity.this,
-                                        "Model download failed, please check" +
-                                                " your connection.",
-                                        Toast.LENGTH_LONG)
-                                        .show();
-                            }
-                        });
+    private synchronized void downloadModel(String modelName) {
+      final FirebaseCustomRemoteModel remoteModel =
+          new FirebaseCustomRemoteModel
+              .Builder(modelName)
+              .build();
+      FirebaseModelDownloadConditions conditions =
+          new FirebaseModelDownloadConditions.Builder()
+              .requireWifi()
+              .build();
+      final FirebaseModelManager firebaseModelManager = FirebaseModelManager.getInstance();
+      firebaseModelManager
+          .download(remoteModel, conditions)
+          .continueWithTask(task ->
+              firebaseModelManager.getLatestModelFile(remoteModel)
+          )
+          .continueWith((Continuation<File, Void>) task -> {
+            // Initialize a text classifier instance with the model
+            textClassifier = NLClassifier
+                .createFromFile(task.getResult());
+            return null;
+          })
+          .addOnFailureListener(e -> {
+            Log.e(TAG, "Failed to build FirebaseModelInterpreter. ", e);
+            Toast.makeText(
+                MainActivity.this,
+                "Model download failed, please check your connection.",
+                Toast.LENGTH_LONG)
+                .show();
+          });
     }
 
     /** Configure RemoteConfig. */
@@ -206,18 +172,18 @@ public class MainActivity extends AppCompatActivity {
         FirebaseRemoteConfigSettings configSettings = new FirebaseRemoteConfigSettings.Builder()
                 .setMinimumFetchIntervalInSeconds(3600)
                 .build();
-        mFirebaseRemoteConfig.setConfigSettingsAsync(configSettings);
+        remoteConfig.setConfigSettingsAsync(configSettings);
     }
 
     /** Setup TextClassification. */
     private void setupTextClassification() {
         configureRemoteConfig();
-        mFirebaseRemoteConfig.fetchAndActivate().
+        remoteConfig.fetchAndActivate().
                 addOnCompleteListener(new OnCompleteListener<Boolean>() {
                     @Override
                     public void onComplete(@NonNull Task<Boolean> task) {
                         if (task.isSuccessful()) {
-                            final String modelName = mFirebaseRemoteConfig.getString("model_name");
+                            final String modelName = remoteConfig.getString("model_name");
                             downloadModel(modelName);
                         } else {
                             Log.d(TAG, "Fetch failed");

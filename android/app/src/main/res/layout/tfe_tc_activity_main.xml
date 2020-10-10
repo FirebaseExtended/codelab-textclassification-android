@@ -27,24 +27,25 @@
       android:layout_height="wrap_content"
       android:hint="@string/tfe_tc_edit_text_hint"
       android:inputType="textNoSuggestions"
-      app:layout_constraintBaseline_toBaselineOf="@+id/button"
-      app:layout_constraintEnd_toStartOf="@+id/button"
+      app:layout_constraintBaseline_toBaselineOf="@+id/predict_button"
+      app:layout_constraintBottom_toBottomOf="parent"
       app:layout_constraintStart_toStartOf="parent"
-      app:layout_constraintBottom_toBottomOf="parent" />
+      app:layout_constraintEnd_toStartOf="@id/predict_button"/>
 
   <Button
-      android:id="@+id/button"
+      android:id="@+id/predict_button"
       android:layout_width="wrap_content"
       android:layout_height="wrap_content"
       android:text="@string/tfe_tc_button_ok"
       app:layout_constraintBottom_toBottomOf="parent"
-      app:layout_constraintStart_toEndOf="@+id/input_text" />
+      app:layout_constraintEnd_toStartOf="@id/yes_button"/>
 
   <Button
       android:id="@+id/yes_button"
       android:layout_width="wrap_content"
       android:layout_height="wrap_content"
+      android:text="@string/tfe_tc_button_yes"
       app:layout_constraintBottom_toBottomOf="parent"
-      app:layout_constraintStart_toEndOf="@+id/button" />
+      app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

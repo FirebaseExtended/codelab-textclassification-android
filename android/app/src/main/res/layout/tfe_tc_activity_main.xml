@@ -38,14 +38,6 @@
       android:layout_height="wrap_content"
       android:text="@string/tfe_tc_button_ok"
       app:layout_constraintBottom_toBottomOf="parent"
-      app:layout_constraintEnd_toStartOf="@id/yes_button"/>
-
-  <Button
-      android:id="@+id/yes_button"
-      android:layout_width="wrap_content"
-      android:layout_height="wrap_content"
-      android:text="@string/tfe_tc_button_yes"
-      app:layout_constraintBottom_toBottomOf="parent"
       app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

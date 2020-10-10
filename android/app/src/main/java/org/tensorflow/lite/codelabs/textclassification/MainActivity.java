@@ -17,7 +17,6 @@
 package org.tensorflow.lite.codelabs.textclassification;
 
 import android.os.Bundle;
-import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -25,23 +24,15 @@ import android.widget.EditText;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-
 import com.google.android.gms.tasks.Continuation;
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
-import com.google.firebase.analytics.FirebaseAnalytics;
 import com.google.firebase.ml.common.modeldownload.FirebaseModelDownloadConditions;
 import com.google.firebase.ml.common.modeldownload.FirebaseModelManager;
 import com.google.firebase.ml.custom.FirebaseCustomRemoteModel;
-import com.google.firebase.remoteconfig.FirebaseRemoteConfig;
-import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings;
-
 import java.io.File;
 import java.util.List;
-
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.tensorflow.lite.support.label.Category;
 import org.tensorflow.lite.task.text.nlclassifier.NLClassifier;
 
@@ -51,10 +42,11 @@ public class MainActivity extends AppCompatActivity {
 
   private TextView resultTextView;
   private EditText inputEditText;
-  private Handler handler;
+  private ExecutorService executorService;
   private ScrollView scrollView;
-  private FirebaseAnalytics analytics;
-  private FirebaseRemoteConfig remoteConfig;
+  private Button predictButton;
+
+  // TODO 5: Define a NLClassifier variable
   private NLClassifier textClassifier;
 
   @Override
@@ -63,60 +55,30 @@ public class MainActivity extends AppCompatActivity {
     setContentView(R.layout.tfe_tc_activity_main);
     Log.v(TAG, "onCreate");
 
-    handler = new Handler();
-    Button classifyButton = findViewById(R.id.predict_button);
-    classifyButton.setOnClickListener(
-        (View v) -> {
-          classify(inputEditText.getText().toString());
-        });
+    executorService = Executors.newSingleThreadExecutor();
     resultTextView = findViewById(R.id.result_text_view);
     inputEditText = findViewById(R.id.input_text);
     scrollView = findViewById(R.id.scroll_view);
-    Button yesButton = findViewById(R.id.yes_button);
-    analytics = FirebaseAnalytics.getInstance(this);
-    remoteConfig = FirebaseRemoteConfig.getInstance();
 
-    yesButton.setOnClickListener(
+    predictButton = findViewById(R.id.predict_button);
+    predictButton.setOnClickListener(
         (View v) -> {
-          analytics.logEvent("correct_inference", null);
+          classify(inputEditText.getText().toString());
         });
-  }
 
-  @Override
-  protected void onStart() {
-    super.onStart();
-    Log.v(TAG, "onStart");
-    setupTextClassification();
-  }
-
-  @Override
-  protected void onStop() {
-    super.onStop();
-    Log.v(TAG, "onStop");
-    handler.post(
-        () -> {
-          textClassifier.close();
-        });
+    // TODO 3: Call the method to download TFLite model
+    downloadModel("sentiment_analysis");
   }
 
   /** Send input text to TextClassificationClient and get the classify messages. */
   private void classify(final String text) {
-    handler.post(
+    executorService.execute(
         () -> {
-          // Run text classification with TF Lite.
+          // TODO 7: Run sentiment analysis on the input text
           List<Category> results = textClassifier.classify(text);
 
-          // Show classification result on screen
-          showResult(text, results);
-        });
-  }
-
-  /** Show classification result on the screen. */
-  private void showResult(final String inputText, final List<Category> results) {
-    // Run on UI thread as we'll updating our app UI
-    runOnUiThread(
-        () -> {
-          String textToShow = "Input: " + inputText + "\nOutput:\n";
+          // TODO 8: Convert the result to a human-readable text
+          String textToShow = "Input: " + text + "\nOutput:\n";
           for (int i = 0; i < results.size(); i++) {
             Category result = results.get(i);
             textToShow +=
@@ -124,6 +86,16 @@ public class MainActivity extends AppCompatActivity {
           }
           textToShow += "---------\n";
 
+          // Show classification result on screen
+          showResult(textToShow);
+        });
+  }
+
+  /** Show classification result on the screen. */
+  private void showResult(final String textToShow) {
+    // Run on UI thread as we'll updating our app UI
+    runOnUiThread(
+        () -> {
           // Append the result to the UI.
           resultTextView.append(textToShow);
 
@@ -135,60 +107,42 @@ public class MainActivity extends AppCompatActivity {
         });
   }
 
-    /** Download model from Firebase ML. */
-    private synchronized void downloadModel(String modelName) {
-      final FirebaseCustomRemoteModel remoteModel =
-          new FirebaseCustomRemoteModel
-              .Builder(modelName)
-              .build();
-      FirebaseModelDownloadConditions conditions =
-          new FirebaseModelDownloadConditions.Builder()
-              .requireWifi()
-              .build();
-      final FirebaseModelManager firebaseModelManager = FirebaseModelManager.getInstance();
-      firebaseModelManager
-          .download(remoteModel, conditions)
-          .continueWithTask(task ->
-              firebaseModelManager.getLatestModelFile(remoteModel)
-          )
-          .continueWith((Continuation<File, Void>) task -> {
-            // Initialize a text classifier instance with the model
-            textClassifier = NLClassifier
-                .createFromFile(task.getResult());
-            return null;
-          })
-          .addOnFailureListener(e -> {
-            Log.e(TAG, "Failed to build FirebaseModelInterpreter. ", e);
-            Toast.makeText(
-                MainActivity.this,
-                "Model download failed, please check your connection.",
-                Toast.LENGTH_LONG)
-                .show();
-          });
-    }
+  // TODO 2: Implement a method to download TFLite model from Firebase
+  /** Download model from Firebase ML. */
+  private synchronized void downloadModel(String modelName) {
+    final FirebaseCustomRemoteModel remoteModel =
+        new FirebaseCustomRemoteModel
+            .Builder(modelName)
+            .build();
+    FirebaseModelDownloadConditions conditions =
+        new FirebaseModelDownloadConditions.Builder()
+            .requireWifi()
+            .build();
+    final FirebaseModelManager firebaseModelManager = FirebaseModelManager.getInstance();
+    firebaseModelManager
+        .download(remoteModel, conditions)
+        .continueWithTask(task ->
+            firebaseModelManager.getLatestModelFile(remoteModel)
+        )
+        .continueWith(executorService, (Continuation<File, Void>) task -> {
+          // Initialize a text classifier instance with the model
+          File modelFile = task.getResult();
 
-    /** Configure RemoteConfig. */
-    private void configureRemoteConfig() {
-        FirebaseRemoteConfigSettings configSettings = new FirebaseRemoteConfigSettings.Builder()
-                .setMinimumFetchIntervalInSeconds(3600)
-                .build();
-        remoteConfig.setConfigSettingsAsync(configSettings);
-    }
+          // TODO 6: Initialize a TextClassifier with the downloaded model
+          textClassifier = NLClassifier.createFromFile(modelFile);
 
-    /** Setup TextClassification. */
-    private void setupTextClassification() {
-        configureRemoteConfig();
-        remoteConfig.fetchAndActivate().
-                addOnCompleteListener(new OnCompleteListener<Boolean>() {
-                    @Override
-                    public void onComplete(@NonNull Task<Boolean> task) {
-                        if (task.isSuccessful()) {
-                            final String modelName = remoteConfig.getString("model_name");
-                            downloadModel(modelName);
-                        } else {
-                            Log.d(TAG, "Fetch failed");
-                        }
-                    }
-                });
-    }
+          // Enable predict button
+          predictButton.setEnabled(true);
+          return null;
+        })
+        .addOnFailureListener(e -> {
+          Log.e(TAG, "Failed to download and initialize the model. ", e);
+          Toast.makeText(
+              MainActivity.this,
+              "Model download failed, please check your connection.",
+              Toast.LENGTH_LONG)
+              .show();
+          predictButton.setEnabled(false);
+        });
+  }
 }

@@ -6,7 +6,7 @@ android {
     buildToolsVersion "29.0.3"
     defaultConfig {
         applicationId "org.tensorflow.lite.codelabs.textclassification"
-        minSdkVersion 19
+        minSdkVersion 21
         targetSdkVersion 29
         versionCode 1
         versionName "1.0"
@@ -42,7 +42,7 @@ dependencies {
     implementation 'com.google.firebase:firebase-ml-model-interpreter:22.0.4'
 
     // TODO 4: Add TFLite Task API (Text) dependency
-    implementation 'org.tensorflow:tensorflow-lite-task-text:0.0.0-nightly'
+    implementation 'org.tensorflow:tensorflow-lite-task-text:0.1.0'
 
     testImplementation 'androidx.test:core:1.3.0'
     testImplementation 'junit:junit:4.13'

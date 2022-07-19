@@ -125,14 +125,24 @@ public class MainActivity extends AppCompatActivity {
                       textClassifier = NLClassifier.createFromFile(model.getFile());
                       predictButton.setEnabled(true);
                   } catch (IOException e) {
-                      Log.e(TAG, "Failed to download and initialize the model. ", e);
+                      Log.e(TAG, "Failed to initialize the model. ", e);
+                      Toast.makeText(
+                              MainActivity.this,
+                              "Model initialization failed.",
+                              Toast.LENGTH_LONG)
+                              .show();
+                      predictButton.setEnabled(false);
+                  }
+              })
+              .addOnFailureListener(e -> {
+                      Log.e(TAG, "Failed to download the model. ", e);
                       Toast.makeText(
                               MainActivity.this,
                               "Model download failed, please check your connection.",
                               Toast.LENGTH_LONG)
                               .show();
-                      predictButton.setEnabled(false);
-                  }
-              });
+
+                      }
+              );
   }
 }

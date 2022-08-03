@@ -26,10 +26,14 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.gms.tasks.Continuation;
-import com.google.firebase.ml.common.modeldownload.FirebaseModelDownloadConditions;
-import com.google.firebase.ml.common.modeldownload.FirebaseModelManager;
-import com.google.firebase.ml.custom.FirebaseCustomRemoteModel;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.firebase.ml.modeldownloader.CustomModel;
+import com.google.firebase.ml.modeldownloader.CustomModelDownloadConditions;
+import com.google.firebase.ml.modeldownloader.DownloadType;
+import com.google.firebase.ml.modeldownloader.FirebaseModelDownloader;
+
 import java.io.File;
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -110,39 +114,35 @@ public class MainActivity extends AppCompatActivity {
   // TODO 2: Implement a method to download TFLite model from Firebase
   /** Download model from Firebase ML. */
   private synchronized void downloadModel(String modelName) {
-    final FirebaseCustomRemoteModel remoteModel =
-        new FirebaseCustomRemoteModel
-            .Builder(modelName)
-            .build();
-    FirebaseModelDownloadConditions conditions =
-        new FirebaseModelDownloadConditions.Builder()
+      CustomModelDownloadConditions conditions = new CustomModelDownloadConditions.Builder()
             .requireWifi()
             .build();
-    final FirebaseModelManager firebaseModelManager = FirebaseModelManager.getInstance();
-    firebaseModelManager
-        .download(remoteModel, conditions)
-        .continueWithTask(task ->
-            firebaseModelManager.getLatestModelFile(remoteModel)
-        )
-        .continueWith(executorService, (Continuation<File, Void>) task -> {
-          // Initialize a text classifier instance with the model
-          File modelFile = task.getResult();
+      FirebaseModelDownloader.getInstance()
+              .getModel("sentiment_analysis", DownloadType.LOCAL_MODEL, conditions)
+              .addOnSuccessListener(model -> {
+                  try {
+                      // TODO 6: Initialize a TextClassifier with the downloaded model
+                      textClassifier = NLClassifier.createFromFile(model.getFile());
+                      predictButton.setEnabled(true);
+                  } catch (IOException e) {
+                      Log.e(TAG, "Failed to initialize the model. ", e);
+                      Toast.makeText(
+                              MainActivity.this,
+                              "Model initialization failed.",
+                              Toast.LENGTH_LONG)
+                              .show();
+                      predictButton.setEnabled(false);
+                  }
+              })
+              .addOnFailureListener(e -> {
+                      Log.e(TAG, "Failed to download the model. ", e);
+                      Toast.makeText(
+                              MainActivity.this,
+                              "Model download failed, please check your connection.",
+                              Toast.LENGTH_LONG)
+                              .show();
 
-          // TODO 6: Initialize a TextClassifier with the downloaded model
-          textClassifier = NLClassifier.createFromFile(modelFile);
-
-          // Enable predict button
-          predictButton.setEnabled(true);
-          return null;
-        })
-        .addOnFailureListener(e -> {
-          Log.e(TAG, "Failed to download and initialize the model. ", e);
-          Toast.makeText(
-              MainActivity.this,
-              "Model download failed, please check your connection.",
-              Toast.LENGTH_LONG)
-              .show();
-          predictButton.setEnabled(false);
-        });
+                      }
+              );
   }
 }
